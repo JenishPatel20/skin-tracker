@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm_config_cache=/tmp/npm-cache-new npm run dev)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(npm_config_cache=/tmp/npm-cache-new npm install -g vercel)",
+      "Bash(npm_config_cache=/tmp/npm-cache-new npx vercel --version)",
+      "Bash(npm_config_cache=/tmp/npm-cache-new npx vercel whoami)",
+      "Bash(npm_config_cache=/tmp/npm-cache-new npx vercel --prod)",
+      "Bash(npm_config_cache=/tmp/npm-cache-new npx vercel env ls --scope jenishpatel20s-projects)",
+      "Bash(find /Users/jenishpatel -type d -name \"tracker-vercel\" 2>/dev/null | head -5)",
+      "Read(//Users/jenishpatel/**)",
+      "Bash(pnpm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3002)"
+    ]
+  }
+}
