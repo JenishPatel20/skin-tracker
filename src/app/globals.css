@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+:root {
+  --background: 222 47% 6%;
+  --foreground: 210 40% 96%;
+  --card: 222 47% 9%;
+  --card-foreground: 210 40% 96%;
+  --primary: 168 76% 42%;
+  --primary-foreground: 222 47% 6%;
+  --secondary: 217 32% 17%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 217 32% 14%;
+  --muted-foreground: 215 20% 55%;
+  --accent: 168 60% 30%;
+  --border: 217 32% 17%;
+  --input: 217 32% 17%;
+  --ring: 168 76% 42%;
+  --radius: 0.75rem;
+  --teal: #2dd4bf;
+  --mint: #6ee7b7;
+  --slate: #94a3b8;
+  --glass: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+.light {
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --primary: 168 76% 36%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 93%;
+  --muted: 210 40% 93%;
+  --muted-foreground: 215 20% 50%;
+  --border: 214 32% 88%;
+  --glass: rgba(0, 0, 0, 0.03);
+  --glass-border: rgba(0, 0, 0, 0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+.glass-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--teal) 0%, var(--mint) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.teal-glow { box-shadow: 0 0 20px rgba(45,212,191,0.15), 0 0 60px rgba(45,212,191,0.05); }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
+
+.safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+.safe-top { padding-top: max(1rem, env(safe-area-inset-top)); }
+
+@keyframes pulse-teal { 0%,100%{opacity:1} 50%{opacity:.5} }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+.animate-pulse-teal { animation: pulse-teal 2s ease-in-out infinite; }
+.animate-float { animation: float 3s ease-in-out infinite; }
+.shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.05) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; outline: none; cursor: pointer; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--teal); cursor: pointer; box-shadow: 0 0 8px rgba(45,212,191,.4); }
