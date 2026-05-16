@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +7,9 @@ import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
-import { BarChart2, TrendingUp, AlertCircle } from "lucide-react";
+import { BarChart2, TrendingUp, AlertCircle, Loader2 } from "lucide-react";
+import { getRecentLogs, getRecentSymptoms, getRecentLifestyle } from "@/lib/api";
+import type { SymptomEntry, LifestyleEntry, DailyLog } from "@/types";
 
 const TEAL = "#2dd4bf";
 const MINT = "#6ee7b7";
@@ -14,29 +17,49 @@ const AMBER = "#fbbf24";
 const ROSE = "#fb7185";
 const VIOLET = "#a78bfa";
 
-/* ─── Synthetic demo data ─── */
-const last14 = Array.from({ length: 14 }, (_, i) => {
-  const d = new Date(Date.now() - (13 - i) * 86400000);
-  const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const base = Math.max(0, 4 - i * 0.2 + (Math.random() - 0.5) * 1.5);
-  return {
-    date: label,
-    acne: Math.round(base * 10) / 10,
-    oiliness: Math.round((5 + Math.sin(i * 0.8) * 2 + (Math.random() - 0.5)) * 10) / 10,
-    dryness: Math.round((3 + Math.cos(i * 0.6) + (Math.random() - 0.5)) * 10) / 10,
-    sleep: Math.round((6.5 + Math.random() * 2) * 10) / 10,
-    adherence: Math.min(100, 60 + i * 2.5 + Math.random() * 10),
-  };
-});
+function buildChartData(symptoms: SymptomEntry[], lifestyle: LifestyleEntry[], logs: DailyLog[]) {
+  const symMap = Object.fromEntries(symptoms.map((s) => [s.date, s]));
+  const lifeMap = Object.fromEntries(lifestyle.map((l) => [l.date, l]));
+  const logMap = Object.fromEntries(logs.map((l) => [l.date, l]));
 
-const correlationData = [
-  { label: "Low Sleep (<6h)", acne: 3.8, fill: ROSE },
-  { label: "Good Sleep (≥7h)", acne: 1.6, fill: MINT },
-  { label: "Dairy Day", acne: 3.2, fill: AMBER },
-  { label: "No Dairy", acne: 1.9, fill: TEAL },
-  { label: "High Stress", acne: 3.5, fill: VIOLET },
-  { label: "Low Stress", acne: 1.4, fill: MINT },
-];
+  return Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(Date.now() - (13 - i) * 86400000);
+    const dateStr = d.toISOString().split("T")[0];
+    const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const s = symMap[dateStr];
+    const li = lifeMap[dateStr];
+    const log = logMap[dateStr];
+    return {
+      date: label,
+      acne: s?.new_pimples ?? null,
+      oiliness: s?.oiliness ?? null,
+      dryness: s?.dryness ?? null,
+      sleep: li?.sleep_hours ?? null,
+      adherence: log ? ((log.am_completed ? 1 : 0) + (log.pm_completed ? 1 : 0)) * 50 : null,
+    };
+  });
+}
+
+function buildCorrelationData(symptoms: SymptomEntry[], lifestyle: LifestyleEntry[]) {
+  const symMap = Object.fromEntries(symptoms.map((s) => [s.date, s]));
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+
+  const lowSleep = lifestyle.filter((l) => l.sleep_hours < 6).map((l) => symMap[l.date]?.new_pimples ?? 0);
+  const goodSleep = lifestyle.filter((l) => l.sleep_hours >= 7).map((l) => symMap[l.date]?.new_pimples ?? 0);
+  const dairy = lifestyle.filter((l) => l.dairy_consumed).map((l) => symMap[l.date]?.new_pimples ?? 0);
+  const noDairy = lifestyle.filter((l) => !l.dairy_consumed).map((l) => symMap[l.date]?.new_pimples ?? 0);
+  const stress = lifestyle.filter((l) => l.stress_level >= 7).map((l) => symMap[l.date]?.new_pimples ?? 0);
+  const lowStress = lifestyle.filter((l) => l.stress_level <= 3).map((l) => symMap[l.date]?.new_pimples ?? 0);
+
+  return [
+    { label: "Low Sleep (<6h)", acne: parseFloat(avg(lowSleep).toFixed(1)), fill: ROSE },
+    { label: "Good Sleep (≥7h)", acne: parseFloat(avg(goodSleep).toFixed(1)), fill: MINT },
+    { label: "Dairy Day", acne: parseFloat(avg(dairy).toFixed(1)), fill: AMBER },
+    { label: "No Dairy", acne: parseFloat(avg(noDairy).toFixed(1)), fill: TEAL },
+    { label: "High Stress", acne: parseFloat(avg(stress).toFixed(1)), fill: VIOLET },
+    { label: "Low Stress", acne: parseFloat(avg(lowStress).toFixed(1)), fill: MINT },
+  ];
+}
 
 const weeklyHeatmap = [
   { week: "Wk 1", Mon: 1, Tue: 1, Wed: 0, Thu: 1, Fri: 1, Sat: 1, Sun: 0 },
@@ -61,6 +84,32 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function AnalyticsPage() {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const [chartData, setChartData] = useState(buildChartData([], [], []));
+  const [correlationData, setCorrelationData] = useState(buildCorrelationData([], []));
+  const [loading, setLoading] = useState(true);
+  const [adherencePct, setAdherencePct] = useState(0);
+
+  useEffect(() => {
+    Promise.all([getRecentLogs(14), getRecentSymptoms(14), getRecentLifestyle(14)]).then(
+      ([logs, symptoms, lifestyle]) => {
+        setChartData(buildChartData(symptoms, lifestyle, logs));
+        setCorrelationData(buildCorrelationData(symptoms, lifestyle));
+        const pct = logs.length
+          ? Math.round((logs.filter((l) => l.am_completed && l.pm_completed).length / logs.length) * 100)
+          : 0;
+        setAdherencePct(pct);
+        setLoading(false);
+      }
+    );
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 size={32} className="animate-spin text-[var(--teal)]" />
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 pt-4 pb-4">
@@ -69,9 +118,10 @@ export default function AnalyticsPage() {
       <div className="mt-4 flex flex-col gap-4">
         {/* Summary badges */}
         <div className="flex gap-2 flex-wrap">
-          <Badge variant="success">Acne -42%</Badge>
-          <Badge variant="default">Adherence 86%</Badge>
-          <Badge variant="warning">Oiliness stable</Badge>
+          <Badge variant="default">Adherence {adherencePct}%</Badge>
+          <Badge variant={adherencePct >= 70 ? "success" : "warning"}>
+            {adherencePct >= 70 ? "On track" : "Needs consistency"}
+          </Badge>
         </div>
 
         {/* Acne count chart */}
@@ -84,7 +134,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={last14} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="acneGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={ROSE} stopOpacity={0.3} />
@@ -108,7 +158,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={last14} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                 <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#64748b" }} tickLine={false} axisLine={false} interval={2} />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 9, fill: "#64748b" }} tickLine={false} axisLine={false} />
@@ -128,7 +178,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={last14} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="adherenceGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={TEAL} stopOpacity={0.3} />
@@ -176,7 +226,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={150}>
-              <BarChart data={last14} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                 <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#64748b" }} tickLine={false} axisLine={false} interval={2} />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 9, fill: "#64748b" }} tickLine={false} axisLine={false} />

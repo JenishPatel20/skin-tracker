@@ -1,13 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useAppStore } from "@/lib/store";
 import { getTodayString } from "@/lib/utils";
+import { getSymptomEntry, upsertSymptoms } from "@/lib/api";
 import type { SymptomEntry } from "@/types";
-import { Activity, TrendingUp, TrendingDown, Minus, CheckCircle2 } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, Minus, CheckCircle2, Loader2 } from "lucide-react";
 
 const defaultSymptoms: Omit<SymptomEntry, "id" | "user_id" | "created_at"> = {
   date: "",
@@ -33,15 +34,30 @@ export default function SymptomsPage() {
   const today = getTodayString();
   const [symptoms, setSymptoms] = useState({ ...defaultSymptoms, date: today });
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getSymptomEntry(today).then((entry) => {
+      if (entry) setSymptoms(entry);
+    });
+  }, [today]);
 
   function update<K extends keyof typeof symptoms>(key: K, value: (typeof symptoms)[K]) {
     setSymptoms((prev) => ({ ...prev, [key]: value }));
   }
 
   async function handleSave() {
-    setTodaySymptoms(symptoms);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaving(true);
+    try {
+      const saved = await upsertSymptoms(symptoms);
+      setTodaySymptoms(saved);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
   }
 
   type SymptomNumKey = "oiliness"|"dryness"|"burning"|"sensitivity"|"redness"|"irritation"|"itching"|"new_pimples"|"painful_acne"|"whiteheads"|"blackhead_severity"|"forehead_congestion"|"beard_irritation"|"dark_spot_severity";
@@ -150,8 +166,8 @@ export default function SymptomsPage() {
           </CardContent>
         </Card>
 
-        <Button size="lg" className="w-full" onClick={handleSave}>
-          {saved ? <><CheckCircle2 size={16} /> Saved!</> : "Save Symptoms"}
+        <Button size="lg" className="w-full" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <><CheckCircle2 size={16} /> Saved!</> : "Save Symptoms"}
         </Button>
       </div>
     </div>

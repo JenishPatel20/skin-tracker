@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,9 @@ import { Slider } from "@/components/ui/slider";
 import { Toggle } from "@/components/ui/toggle";
 import { useAppStore } from "@/lib/store";
 import { getTodayString } from "@/lib/utils";
+import { getLifestyleEntry, upsertLifestyle } from "@/lib/api";
 import type { LifestyleEntry } from "@/types";
-import { Leaf, CheckCircle2 } from "lucide-react";
+import { Leaf, CheckCircle2, Loader2 } from "lucide-react";
 
 const defaults: Omit<LifestyleEntry, "id" | "user_id" | "created_at"> = {
   date: "",
@@ -31,15 +32,30 @@ export default function LifestylePage() {
   const today = getTodayString();
   const [data, setData] = useState({ ...defaults, date: today });
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getLifestyleEntry(today).then((entry) => {
+      if (entry) setData(entry);
+    });
+  }, [today]);
 
   function update<K extends keyof typeof data>(key: K, value: (typeof data)[K]) {
     setData((prev) => ({ ...prev, [key]: value }));
   }
 
   async function handleSave() {
-    setTodayLifestyle(data);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaving(true);
+    try {
+      const result = await upsertLifestyle(data);
+      setTodayLifestyle(result);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
   }
 
   type LifestyleBoolKey = "dairy_consumed"|"whey_protein_consumed"|"junk_food_consumed"|"exercise"|"sweating"|"pillowcase_changed"|"beard_shaved"|"face_touched_frequently";
@@ -140,8 +156,8 @@ export default function LifestylePage() {
           </CardContent>
         </Card>
 
-        <Button size="lg" className="w-full" onClick={handleSave}>
-          {saved ? <><CheckCircle2 size={16} /> Saved!</> : "Save Lifestyle Log"}
+        <Button size="lg" className="w-full" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <><CheckCircle2 size={16} /> Saved!</> : "Save Lifestyle Log"}
         </Button>
       </div>
     </div>

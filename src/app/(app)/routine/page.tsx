@@ -8,8 +8,9 @@ import { Toggle } from "@/components/ui/toggle";
 import { Progress } from "@/components/ui/progress";
 import { useAppStore } from "@/lib/store";
 import { getWeekday, getPMRoutineForDay, getTodayString } from "@/lib/utils";
+import { getDailyLog, upsertDailyLog } from "@/lib/api";
 import type { AMSteps, PMSteps } from "@/types";
-import { Sun, Moon, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { Sun, Moon, CheckCircle2, Clock, AlertTriangle, Loader2 } from "lucide-react";
 
 const defaultAM: AMSteps = { cleanser: false, spf: false, moisturizer: false, eye_cream: false, custom: [] };
 const defaultPM: PMSteps = { gentle_cleanser: false, la_roche_cleanser: false, mytret: false, moisturizer: false, recovery_routine: false, spot_treatment: false, skipped: false };
@@ -26,6 +27,16 @@ export default function RoutinePage() {
   const [amTime, setAmTime] = useState<string | null>(null);
   const [pmTime, setPmTime] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Load today's existing log
+  useEffect(() => {
+    getDailyLog(today).then((log) => {
+      if (!log) return;
+      if (log.am_steps) setAm(log.am_steps);
+      if (log.pm_steps) setPm(log.pm_steps);
+    });
+  }, [today]);
 
   const amSteps: { key: keyof AMSteps; label: string; desc?: string }[] = [
     { key: "cleanser", label: "Artistry Cleanser", desc: "Gentle morning cleanse" },
@@ -66,9 +77,25 @@ export default function RoutinePage() {
     setTodayLog({ pm_steps: updated, pm_completed: Object.values(updated).some(Boolean) });
   }
 
-  function handleSave() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const log = await upsertDailyLog({
+        date: today,
+        am_steps: am,
+        pm_steps: pm,
+        am_completed: Object.entries(am).filter(([k]) => k !== "custom").some(([, v]) => v),
+        pm_completed: Object.values(pm).some(Boolean),
+        pm_routine_type: pmType,
+      });
+      setTodayLog(log);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const routineLabels: Record<string, { label: string; color: string }> = {
@@ -185,7 +212,7 @@ export default function RoutinePage() {
           size="lg"
           onClick={handleSave}
         >
-          {saved ? <><CheckCircle2 size={16} /> Saved!</> : "Save Routine"}
+          {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <><CheckCircle2 size={16} /> Saved!</> : "Save Routine"}
         </Button>
       </div>
 

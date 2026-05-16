@@ -10,47 +10,47 @@ import { ScoreRing } from "@/components/ui/score-ring";
 import { useAppStore } from "@/lib/store";
 import { getWeekday, getTodayString, getPMRoutineForDay, formatDate } from "@/lib/utils";
 import { generateInsights } from "@/lib/insights";
-import type { SymptomEntry, LifestyleEntry, DailyLog, AIInsight } from "@/types";
+import { getRecentLogs, getRecentSymptoms, getRecentLifestyle, computeHabitStats, computeSkinScore } from "@/lib/api";
+import type { DailyLog, AIInsight } from "@/types";
 import {
   Flame, CheckCircle2, AlertTriangle, Camera, Plus, Sun, Moon,
-  Droplets, TrendingUp, TrendingDown, Minus, Clock, Star,
+  Droplets, TrendingUp, Minus, Clock, Star, Loader2,
 } from "lucide-react";
 
-const MOCK_STREAK = 12;
-const MOCK_SCORE = 74;
-const MOCK_WEEKLY_PCT = 86;
-
 export default function DashboardPage() {
-  const { todayLog, skinScore, setSkinScore, setHabitStats } = useAppStore();
+  const { todayLog, skinScore, setSkinScore, setHabitStats, habitStats } = useAppStore();
   const today = getTodayString();
   const weekday = getWeekday();
   const pmRoutine = getPMRoutineForDay(weekday);
   const [insights, setInsights] = useState<AIInsight[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setSkinScore(MOCK_SCORE);
-    setHabitStats({
-      current_streak: MOCK_STREAK,
-      longest_streak: 21,
-      am_streak: 14,
-      pm_streak: MOCK_STREAK,
-      weekly_completion: MOCK_WEEKLY_PCT,
-      total_logs: 38,
-    });
-
-    const mockSymptoms: SymptomEntry[] = [
-      { id: "1", user_id: "", date: today, oiliness: 6, dryness: 3, burning: 2, sensitivity: 3,
-        redness: 4, irritation: 3, itching: 2, new_pimples: 2, painful_acne: 1, whiteheads: 1,
-        blackhead_severity: 4, forehead_congestion: 5, beard_irritation: 2, dark_spot_severity: 3,
-        overall_trend: "better", created_at: today },
-    ];
-    setInsights(generateInsights(mockSymptoms, [], []));
+    async function load() {
+      try {
+        const [logs, symptoms, lifestyle] = await Promise.all([
+          getRecentLogs(30),
+          getRecentSymptoms(30),
+          getRecentLifestyle(30),
+        ]);
+        const stats = await computeHabitStats(logs);
+        const score = computeSkinScore(logs, symptoms);
+        setHabitStats(stats);
+        setSkinScore(score);
+        setInsights(generateInsights(symptoms, lifestyle, logs));
+      } catch (e) {
+        // user has no data yet — leave defaults
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
   const amChecked = todayLog?.am_steps;
-  const pmChecked = todayLog?.pm_steps;
   const amCount = amChecked ? Object.values(amChecked).filter(Boolean).length : 0;
-  const pmCount = pmChecked ? Object.values(pmChecked).filter(Boolean).length : 0;
+  const streak = habitStats?.current_streak ?? 0;
+  const weeklyPct = habitStats?.weekly_completion ?? 0;
 
   return (
     <div className="px-4 pt-4 pb-2">
@@ -60,20 +60,26 @@ export default function DashboardPage() {
         {/* Score + Streak row */}
         <div className="grid grid-cols-2 gap-3">
           <Card className="flex flex-col items-center py-5 teal-glow">
-            <ScoreRing score={skinScore || MOCK_SCORE} size={100} />
+            {loading ? (
+              <div className="flex items-center justify-center h-24">
+                <Loader2 size={24} className="animate-spin text-[var(--teal)]" />
+              </div>
+            ) : (
+              <ScoreRing score={skinScore} size={100} />
+            )}
           </Card>
           <div className="flex flex-col gap-3">
             <Card className="flex-1 flex flex-col items-center justify-center py-3">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <Flame size={18} className="text-orange-400" />
-                <span className="text-2xl font-bold tabular-nums">{MOCK_STREAK}</span>
+                <span className="text-2xl font-bold tabular-nums">{streak}</span>
               </div>
               <span className="text-xs text-[hsl(var(--muted-foreground))]">Day Streak</span>
             </Card>
             <Card className="flex-1 flex flex-col items-center justify-center py-3">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <Star size={16} className="text-amber-400" />
-                <span className="text-2xl font-bold tabular-nums">{MOCK_WEEKLY_PCT}%</span>
+                <span className="text-2xl font-bold tabular-nums">{weeklyPct}%</span>
               </div>
               <span className="text-xs text-[hsl(var(--muted-foreground))]">This Week</span>
             </Card>
